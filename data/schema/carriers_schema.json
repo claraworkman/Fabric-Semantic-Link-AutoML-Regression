@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Carriers Table Schema",
+  "description": "Schema for the carriers dimension table in the delivery semantic model",
+  "type": "object",
+  "properties": {
+    "carrier_id": {
+      "type": "string",
+      "description": "Unique identifier for carrier (PRIMARY KEY)"
+    },
+    "carrier_name": {
+      "type": "string",
+      "description": "Name of the carrier company"
+    },
+    "carrier_type": {
+      "type": "string",
+      "description": "Type of carrier service"
+    },
+    "speed_factor": {
+      "type": "number",
+      "description": "Relative speed multiplier (higher = faster)",
+      "minimum": 0
+    },
+    "reliability_score": {
+      "type": "number",
+      "description": "Quality/reliability score",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "active": {
+      "type": "boolean",
+      "description": "Whether carrier is currently active"
+    }
+  },
+  "required": [
+    "carrier_id",
+    "carrier_name"
+  ]
+}

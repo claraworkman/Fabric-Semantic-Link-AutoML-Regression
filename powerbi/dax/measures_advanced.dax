@@ -1,0 +1,277 @@
+-- =====================================================
+-- Advanced DAX Measures for Delivery Time Prediction
+-- =====================================================
+
+-- -------------------------------------
+-- Time Intelligence
+-- -------------------------------------
+
+MAE_LastMonth = 
+CALCULATE(
+    [MAE],
+    DATEADD('Date'[Date], -1, MONTH)
+)
+
+MAE_MoM_Change = 
+[MAE] - [MAE_LastMonth]
+
+MAE_MoM_ChangePct = 
+DIVIDE([MAE_MoM_Change], [MAE_LastMonth], 0)
+
+AccuracyTrend = 
+// 7-day moving average of accuracy rate
+AVERAGEX(
+    DATESINPERIOD(
+        'Date'[Date],
+        MAX('Date'[Date]),
+        -7,
+        DAY
+    ),
+    [AccuracyRate]
+)
+
+
+-- -------------------------------------
+-- Carrier Performance
+-- -------------------------------------
+
+MAE_ByCarrier = 
+CALCULATE(
+    [MAE],
+    ALLEXCEPT(shipment_predictions, shipment_predictions[carrier_id])
+)
+
+BestCarrier_MAE = 
+MINX(
+    VALUES(shipment_predictions[carrier_id]),
+    [MAE]
+)
+
+WorstCarrier_MAE = 
+MAXX(
+    VALUES(shipment_predictions[carrier_id]),
+    [MAE]
+)
+
+CarrierRank_ByAccuracy = 
+RANKX(
+    ALL(shipment_predictions[carrier_id]),
+    [AccuracyRate],
+    ,
+    DESC,
+    DENSE
+)
+
+
+-- -------------------------------------
+-- Regional Performance
+-- -------------------------------------
+
+MAE_ByDestinationRegion = 
+CALCULATE(
+    [MAE],
+    ALLEXCEPT(shipment_predictions, shipment_predictions[destination_region])
+)
+
+TopRegion_ByAccuracy = 
+TOPN(
+    1,
+    VALUES(shipment_predictions[destination_region]),
+    [AccuracyRate],
+    DESC
+)
+
+RegionPerformanceScore = 
+// Composite score: accuracy - MAE/10
+[AccuracyRate] - DIVIDE([MAE], 10, 0)
+
+
+-- -------------------------------------
+-- Service Level Analysis
+-- -------------------------------------
+
+AvgDeliveryDays_ByServiceLevel = 
+CALCULATE(
+    [AvgActualDeliveryDays],
+    ALLEXCEPT(shipment_predictions, shipment_predictions[service_level])
+)
+
+ServiceLevel_MeetsSLA = 
+// Check if average delivery meets service level target
+VAR ServiceLevel = SELECTEDVALUE(shipment_predictions[service_level])
+VAR Target = 
+    SWITCH(
+        ServiceLevel,
+        "overnight", 1,
+        "express", 3,
+        "standard", 7,
+        "economy", 14,
+        7  // default
+    )
+RETURN
+IF([AvgActualDeliveryDays] <= Target, "Yes", "No")
+
+
+-- -------------------------------------
+-- Distance Band Analysis
+-- -------------------------------------
+
+MAE_ByDistance = 
+CALCULATE(
+    [MAE],
+    ALLEXCEPT(shipment_predictions, shipment_predictions[distance_band])
+)
+
+LongDistance_Accuracy = 
+CALCULATE(
+    [AccuracyRate],
+    shipment_predictions[distance_band] IN {"long", "very_long"}
+)
+
+ShortDistance_Accuracy = 
+CALCULATE(
+    [AccuracyRate],
+    shipment_predictions[distance_band] IN {"short", "very_short"}
+)
+
+
+-- -------------------------------------
+-- Error Segmentation
+-- -------------------------------------
+
+HighErrorShipments = 
+// Shipments with >3 days error
+CALCULATE(
+    COUNTROWS(shipment_predictions),
+    ABS(shipment_predictions[prediction_error]) > 3
+)
+
+HighErrorPct = 
+DIVIDE([HighErrorShipments], [TotalShipments], 0)
+
+AvgError_TopDecile = 
+// Average error for worst 10% predictions
+VAR Top10Pct = [TotalShipments] * 0.1
+RETURN
+CALCULATE(
+    AVERAGE(shipment_predictions[prediction_error]),
+    TOPN(
+        Top10Pct,
+        shipment_predictions,
+        ABS(shipment_predictions[prediction_error]),
+        DESC
+    )
+)
+
+
+-- -------------------------------------
+-- Predictive Alerts
+-- -------------------------------------
+
+LateDeliveryAlert = 
+// Flag if predicted delivery > historical average + 2 days
+VAR HistoricalAvg = [AvgActualDeliveryDays]
+VAR Predicted = SELECTEDVALUE(shipment_predictions[predicted_delivery_days])
+RETURN
+IF(Predicted > HistoricalAvg + 2, "⚠️ At Risk", "✅ On Track")
+
+UrgentShipments = 
+// Count of shipments predicted to be late
+CALCULATE(
+    COUNTROWS(shipment_predictions),
+    shipment_predictions[predicted_delivery_days] > [AvgActualDeliveryDays] + 2
+)
+
+
+-- -------------------------------------
+-- Model Drift Detection
+-- -------------------------------------
+
+RecentMAE = 
+// MAE for last 30 days
+CALCULATE(
+    [MAE],
+    DATESINPERIOD(
+        'Date'[Date],
+        MAX('Date'[Date]),
+        -30,
+        DAY
+    )
+)
+
+HistoricalMAE = 
+// MAE for all data
+[MAE]
+
+ModelDriftPct = 
+// % change in MAE (indicator of model degradation)
+DIVIDE(
+    [RecentMAE] - [HistoricalMAE],
+    [HistoricalMAE],
+    0
+)
+
+ModelStatus = 
+// Model health indicator
+VAR Drift = [ModelDriftPct]
+RETURN
+SWITCH(
+    TRUE(),
+    Drift > 0.2, "🔴 Needs Retraining",
+    Drift > 0.1, "🟡 Monitor Closely",
+    "🟢 Healthy"
+)
+
+
+-- -------------------------------------
+-- Warehouse Performance
+-- -------------------------------------
+
+MAE_ByWarehouse = 
+CALCULATE(
+    [MAE],
+    ALLEXCEPT(shipment_predictions, shipment_predictions[warehouse_id])
+)
+
+TopWarehouse_ByAccuracy = 
+CALCULATE(
+    MAX(shipment_predictions[warehouse_id]),
+    TOPN(
+        1,
+        VALUES(shipment_predictions[warehouse_id]),
+        [AccuracyRate],
+        DESC
+    )
+)
+
+WarehouseEfficiencyScore = 
+// Composite: accuracy * (1/MAE)
+[AccuracyRate] * DIVIDE(1, [MAE], 0)
+
+
+-- -------------------------------------
+-- Seasonality Analysis
+-- -------------------------------------
+
+MAE_ByMonth = 
+CALCULATE(
+    [MAE],
+    ALLEXCEPT('Date', 'Date'[Month])
+)
+
+MAE_ByDayOfWeek = 
+CALCULATE(
+    [MAE],
+    ALLEXCEPT('Date', 'Date'[DayOfWeek])
+)
+
+PeakSeasonIndicator = 
+// Flag high-volume months
+VAR CurrentMonthVolume = [TotalShipments]
+VAR AvgMonthlyVolume = 
+    AVERAGEX(
+        ALL('Date'[Month]),
+        CALCULATE([TotalShipments])
+    )
+RETURN
+IF(CurrentMonthVolume > AvgMonthlyVolume * 1.2, "Peak Season", "Normal")

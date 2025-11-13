@@ -1,0 +1,70 @@
+# Fabric Lakehouse Configuration
+# Update these values to match your Microsoft Fabric environment
+
+# Workspace Information
+workspace_id: "your-workspace-id-here"
+workspace_name: "YourWorkspaceName"
+
+# Lakehouse Configuration
+lakehouse_name: "DeliveryPredictions"
+lakehouse_id: "your-lakehouse-id-here"
+
+# Semantic Model Configuration
+semantic_model_name: "delivery semantic model"
+semantic_model_id: "your-semantic-model-id-here"
+
+# Table Names in Lakehouse
+tables:
+  shipments: "shipments"
+  carriers: "carriers"
+  warehouses: "warehouses"
+  predictions: "shipment_predictions"
+  predictions_history: "predictions_history"
+
+# File Paths in Lakehouse
+paths:
+  raw_data: "Files/raw/"
+  processed_data: "Files/processed/"
+  models: "Files/models/"
+  logs: "Files/logs/"
+  reports: "Files/reports/"
+
+# MLflow Configuration
+mlflow:
+  experiment_name: "DeliveryTimePrediction"
+  tracking_uri: "databricks"
+  registry_uri: "databricks-uc"
+  
+# Model Registry
+model_registry:
+  model_name: "POC-DeliveryTimeModel-AutoML-Safe"
+  staging_alias: "champion"
+  production_alias: "production"
+
+# Data Refresh Settings
+refresh_schedule:
+  training_frequency: "monthly"
+  scoring_frequency: "daily"
+  monitoring_frequency: "weekly"
+
+# Alert Thresholds
+alerts:
+  mae_threshold: 2.0
+  data_drift_threshold: 0.15
+  missing_predictions_threshold: 100
+  
+# Feature Engineering Settings
+features:
+  temporal_features_enabled: true
+  interaction_features_enabled: false
+  polynomial_features_enabled: false
+  
+# Notes
+notes: |
+  Configuration file for Microsoft Fabric Lakehouse paths and settings.
+  Update workspace_id, lakehouse_id, and semantic_model_id after creating resources.
+  
+  To find your IDs:
+  1. Go to your Fabric workspace
+  2. Open Settings for your Lakehouse/Semantic Model
+  3. Copy the ID from the URL or properties panel

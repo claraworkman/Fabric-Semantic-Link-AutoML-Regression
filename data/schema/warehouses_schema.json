@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Warehouses Table Schema",
+  "description": "Schema for the warehouses dimension table in the delivery semantic model",
+  "type": "object",
+  "properties": {
+    "warehouse_id": {
+      "type": "string",
+      "description": "Unique identifier for warehouse (PRIMARY KEY)"
+    },
+    "warehouse_name": {
+      "type": "string",
+      "description": "Name of the warehouse location"
+    },
+    "origin_region": {
+      "type": "string",
+      "description": "Geographic region where warehouse is located",
+      "enum": ["Northeast", "Southeast", "Midwest", "South", "West"]
+    },
+    "capacity": {
+      "type": "integer",
+      "description": "Storage capacity in units",
+      "minimum": 0
+    },
+    "operational_hours": {
+      "type": "integer",
+      "description": "Hours per day operational",
+      "enum": [16, 24]
+    },
+    "latitude": {
+      "type": "number",
+      "description": "Geographic latitude coordinate",
+      "minimum": -90,
+      "maximum": 90
+    },
+    "longitude": {
+      "type": "number",
+      "description": "Geographic longitude coordinate",
+      "minimum": -180,
+      "maximum": 180
+    }
+  },
+  "required": [
+    "warehouse_id",
+    "warehouse_name",
+    "origin_region"
+  ]
+}

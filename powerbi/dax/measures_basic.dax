@@ -1,0 +1,278 @@
+-- =====================================================
+-- Basic DAX Measures for Delivery Time Prediction
+-- Based on shipments, carriers, and warehouses tables
+-- =====================================================
+
+-- -------------------------------------
+-- Actual Delivery Metrics
+-- -------------------------------------
+
+AvgActualDeliveryDays = 
+AVERAGE(shipments[delivery_days_actual])
+
+TotalShipments = 
+COUNTROWS(shipments)
+
+MinActualDeliveryDays = 
+MIN(shipments[delivery_days_actual])
+
+MaxActualDeliveryDays = 
+MAX(shipments[delivery_days_actual])
+
+
+-- -------------------------------------
+-- Predicted Delivery Metrics (from scoring results)
+-- Note: These require the shipment_predictions table from notebook 03
+-- -------------------------------------
+
+AvgPredictedDeliveryDays = 
+// Average predicted delivery time across all shipments
+CALCULATE(
+    AVERAGE(shipment_predictions[predicted_delivery_days]),
+    ISBLANK(shipment_predictions[predicted_delivery_days]) = FALSE
+)
+
+MinPredictedDeliveryDays = 
+MIN(shipment_predictions[predicted_delivery_days])
+
+MaxPredictedDeliveryDays = 
+MAX(shipment_predictions[predicted_delivery_days])
+
+TotalPredictions = 
+// Count of shipments with predictions
+COUNTROWS(
+    FILTER(
+        shipment_predictions,
+        NOT(ISBLANK(shipment_predictions[predicted_delivery_days]))
+    )
+)
+
+
+-- -------------------------------------
+-- Prediction Error Metrics
+-- -------------------------------------
+
+PredictionError = 
+// Calculated error: Actual - Predicted
+VAR ActualDays = AVERAGE(shipments[delivery_days_actual])
+VAR PredictedDays = AVERAGE(shipment_predictions[predicted_delivery_days])
+RETURN
+    ActualDays - PredictedDays
+
+AbsoluteError = 
+// Absolute prediction error
+ABS([PredictionError])
+
+MAE = 
+// Mean Absolute Error - primary accuracy metric
+AVERAGEX(
+    FILTER(
+        shipments,
+        NOT(ISBLANK(shipments[delivery_days_actual]))
+    ),
+    VAR ActualDays = shipments[delivery_days_actual]
+    VAR PredictedDays = RELATED(shipment_predictions[predicted_delivery_days])
+    RETURN
+        ABS(ActualDays - PredictedDays)
+)
+
+RMSE = 
+// Root Mean Squared Error
+SQRT(
+    AVERAGEX(
+        FILTER(
+            shipments,
+            NOT(ISBLANK(shipments[delivery_days_actual]))
+        ),
+        VAR ActualDays = shipments[delivery_days_actual]
+        VAR PredictedDays = RELATED(shipment_predictions[predicted_delivery_days])
+        VAR Error = ActualDays - PredictedDays
+        RETURN
+            POWER(Error, 2)
+    )
+)
+
+MeanPredictionError = 
+// Average signed error (shows bias)
+AVERAGEX(
+    FILTER(
+        shipments,
+        NOT(ISBLANK(shipments[delivery_days_actual]))
+    ),
+    VAR ActualDays = shipments[delivery_days_actual]
+    VAR PredictedDays = RELATED(shipment_predictions[predicted_delivery_days])
+    RETURN
+        ActualDays - PredictedDays
+)
+
+MedianAbsoluteError = 
+// Median absolute error (robust to outliers)
+MEDIANX(
+    FILTER(
+        shipments,
+        NOT(ISBLANK(shipments[delivery_days_actual]))
+    ),
+    VAR ActualDays = shipments[delivery_days_actual]
+    VAR PredictedDays = RELATED(shipment_predictions[predicted_delivery_days])
+    RETURN
+        ABS(ActualDays - PredictedDays)
+)
+
+
+-- -------------------------------------
+-- Accuracy Metrics
+-- -------------------------------------
+
+AccuracyRate = 
+// Percentage of predictions within 2 days
+VAR Threshold = 2
+RETURN
+DIVIDE(
+    CALCULATE(
+        COUNTROWS(shipments),
+        ABS(shipments[prediction_error]) <= Threshold
+    ),
+    COUNTROWS(shipments),
+    0
+)
+
+AccuracyRate1Day = 
+// Percentage of predictions within 1 day
+VAR Threshold = 1
+RETURN
+DIVIDE(
+    CALCULATE(
+        COUNTROWS(shipments),
+        ABS(shipments[prediction_error]) <= Threshold
+    ),
+    COUNTROWS(shipments),
+    0
+)
+
+R2Score = 
+// R-squared (coefficient of determination)
+VAR MeanActual = [AvgActualDeliveryDays]
+VAR SumSquaredResiduals = 
+    SUMX(
+        shipments,
+        POWER(shipments[delivery_days_actual] - shipments[predicted_delivery_days], 2)
+    )
+VAR TotalSumSquares = 
+    SUMX(
+        shipments,
+        POWER(shipments[delivery_days_actual] - MeanActual, 2)
+    )
+RETURN
+1 - DIVIDE(SumSquaredResiduals, TotalSumSquares, 0)
+
+
+-- -------------------------------------
+-- Operational Metrics
+-- -------------------------------------
+
+DelayedShipments = 
+// Shipments that took longer than predicted
+CALCULATE(
+    COUNTROWS(shipments),
+    shipments[prediction_error] > 0
+)
+
+EarlyShipments = 
+// Shipments that arrived earlier than predicted
+CALCULATE(
+    COUNTROWS(shipments),
+    shipments[prediction_error] < 0
+)
+
+DelayedPct = 
+DIVIDE([DelayedShipments], [TotalShipments], 0)
+
+AtRiskShipments = 
+// Shipments predicted to take > 7 days
+CALCULATE(
+    COUNTROWS(shipments),
+    shipments[predicted_delivery_days] > 7
+)
+
+OnTimeDeliveryRate = 
+// Percentage delivered within predicted timeframe +/- 1 day
+DIVIDE(
+    CALCULATE(
+        COUNTROWS(shipments),
+        ABS(shipments[prediction_error]) <= 1
+    ),
+    [TotalShipments],
+    0
+)
+
+
+-- -------------------------------------
+-- Order-to-Ship Metrics
+-- -------------------------------------
+
+AvgOrderToShipDays = 
+AVERAGE(shipments[order_to_ship_days])
+
+MaxOrderToShipDays = 
+MAX(shipments[order_to_ship_days])
+
+
+-- -------------------------------------
+-- Carrier Metrics
+-- -------------------------------------
+
+TotalCarriers = 
+DISTINCTCOUNT(shipments[carrier_id])
+
+AvgDeliveryDays_ByCarrier = 
+CALCULATE(
+    [AvgActualDeliveryDays],
+    ALLEXCEPT(shipments, carriers[carrier_name])
+)
+
+
+-- -------------------------------------
+-- Warehouse Metrics
+-- -------------------------------------
+
+TotalWarehouses = 
+DISTINCTCOUNT(shipments[warehouse_id])
+
+AvgDeliveryDays_ByWarehouse = 
+CALCULATE(
+    [AvgActualDeliveryDays],
+    ALLEXCEPT(shipments, warehouses[warehouse_name])
+)
+
+
+-- -------------------------------------
+-- Regional Metrics
+-- -------------------------------------
+
+AvgDeliveryDays_ByOriginRegion = 
+CALCULATE(
+    [AvgActualDeliveryDays],
+    ALLEXCEPT(shipments, warehouses[origin_region])
+)
+
+AvgDeliveryDays_ByDestinationRegion = 
+CALCULATE(
+    [AvgActualDeliveryDays],
+    ALLEXCEPT(shipments, shipments[destination_region])
+)
+
+
+-- -------------------------------------
+-- Comparative Metrics
+-- -------------------------------------
+
+DiffActualVsPredicted = 
+[AvgActualDeliveryDays] - [AvgPredictedDeliveryDays]
+
+PredictionBias = 
+// Positive = model under-predicts, Negative = model over-predicts
+[MeanPredictionError]
+
+ModelConfidence = 
+// Inverse of RMSE (higher is better)
+DIVIDE(1, [RMSE], 0)

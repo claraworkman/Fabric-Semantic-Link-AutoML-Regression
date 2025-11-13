@@ -1,0 +1,96 @@
+{
+  "model_name": "POC-DeliveryTimeModel-AutoML-Safe",
+  "task": "regression",
+  "target_variable": "delivery_days_actual",
+  "feature_engineering": {
+    "temporal_features": [
+      "ship_dayofweek",
+      "ship_month"
+    ],
+    "derived_features": [
+      "order_to_ship_days"
+    ],
+    "categorical_features": [
+      "carrier_id",
+      "warehouse_id",
+      "origin_region",
+      "destination_region",
+      "distance_band",
+      "service_level"
+    ],
+    "numeric_features": [
+      "ship_dayofweek",
+      "ship_month",
+      "order_to_ship_days"
+    ]
+  },
+  "all_features": [
+    "carrier_id",
+    "warehouse_id",
+    "origin_region",
+    "destination_region",
+    "distance_band",
+    "service_level",
+    "order_to_ship_days",
+    "ship_dayofweek",
+    "ship_month"
+  ],
+  "feature_descriptions": {
+    "carrier_id": "Unique identifier for the logistics carrier handling the shipment",
+    "warehouse_id": "Unique identifier for the origin warehouse/fulfillment center",
+    "origin_region": "Geographic region of shipment origin (Northeast, Southeast, Midwest, South, West)",
+    "destination_region": "Geographic region of shipment destination",
+    "distance_band": "Categorized distance: Short (<100 km), Medium (100-500 km), Long (>500 km)",
+    "service_level": "Selected shipping service level: Ground, Fast, or Express",
+    "order_to_ship_days": "Number of days from order placement to warehouse departure",
+    "ship_dayofweek": "Day of week when shipment departed (0=Monday, 6=Sunday)",
+    "ship_month": "Month when shipment departed (1=January, 12=December)"
+  },
+  "feature_importance_notes": {
+    "high_impact": [
+      "distance_band",
+      "service_level",
+      "carrier_id"
+    ],
+    "moderate_impact": [
+      "origin_region",
+      "destination_region",
+      "order_to_ship_days"
+    ],
+    "low_impact": [
+      "ship_dayofweek",
+      "ship_month"
+    ]
+  },
+  "encoding_strategy": {
+    "categorical_encoding": "label_encoding",
+    "method": "Convert categorical features to category codes using pandas .cat.codes",
+    "note": "AutoML (FLAML) handles encoding internally for tree-based models"
+  },
+  "data_source": {
+    "source_type": "Microsoft Fabric Semantic Model",
+    "semantic_model_name": "delivery semantic model",
+    "tables_used": [
+      "shipments",
+      "carriers",
+      "warehouses"
+    ],
+    "join_strategy": "Left joins from shipments to carriers and warehouses on foreign keys"
+  },
+  "preprocessing_steps": [
+    "1. Load tables from semantic model using sempy.fabric",
+    "2. Join shipments with carriers on carrier_id",
+    "3. Join result with warehouses on warehouse_id",
+    "4. Handle duplicate origin_region columns from join",
+    "5. Select feature columns",
+    "6. Encode categorical features as needed",
+    "7. Split into train/test sets (80/20)"
+  ],
+  "metadata": {
+    "created_date": "2024-01-15",
+    "last_updated": "2024-01-15",
+    "version": "1.0",
+    "author": "BI Analytics Team",
+    "framework": "FLAML AutoML with sklearn"
+  }
+}

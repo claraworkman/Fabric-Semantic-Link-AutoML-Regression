@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Shipments Table Schema",
+  "description": "Schema for the shipments fact table in the delivery semantic model",
+  "type": "object",
+  "properties": {
+    "shipment_id": {
+      "type": "string",
+      "description": "Unique identifier for each shipment"
+    },
+    "order_id": {
+      "type": "string",
+      "description": "Foreign key to orders table"
+    },
+    "carrier_id": {
+      "type": "string",
+      "description": "Foreign key to carriers table"
+    },
+    "warehouse_id": {
+      "type": "string",
+      "description": "Foreign key to warehouses table"
+    },
+    "origin_region": {
+      "type": "string",
+      "description": "Geographic origin region",
+      "enum": ["Northeast", "Southeast", "Midwest", "South", "West"]
+    },
+    "destination_region": {
+      "type": "string",
+      "description": "Geographic destination region",
+      "enum": ["Northeast", "Southeast", "Midwest", "South", "West"]
+    },
+    "distance_band": {
+      "type": "string",
+      "description": "Distance category for shipment",
+      "enum": ["Short", "Medium", "Long"]
+    },
+    "service_level": {
+      "type": "string",
+      "description": "Service level selected",
+      "enum": ["Ground", "Fast", "Express"]
+    },
+    "order_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date order was placed"
+    },
+    "ship_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date shipment left warehouse"
+    },
+    "delivery_date_expected": {
+      "type": "string",
+      "format": "date",
+      "description": "Expected delivery date"
+    },
+    "delivery_date_actual": {
+      "type": "string",
+      "format": "date",
+      "description": "Actual delivery date"
+    },
+    "order_to_ship_days": {
+      "type": "integer",
+      "description": "Number of days from order to ship",
+      "minimum": 0
+    },
+    "ship_dayofweek": {
+      "type": "integer",
+      "description": "Day of week shipped (0=Monday, 6=Sunday)",
+      "minimum": 0,
+      "maximum": 6
+    },
+    "ship_month": {
+      "type": "integer",
+      "description": "Month shipped (1-12)",
+      "minimum": 1,
+      "maximum": 12
+    },
+    "delivery_days_actual": {
+      "type": "number",
+      "description": "TARGET VARIABLE: Actual delivery time in days",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "shipment_id",
+    "carrier_id",
+    "warehouse_id",
+    "ship_date",
+    "delivery_days_actual"
+  ]
+}
