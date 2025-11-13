@@ -35,16 +35,24 @@ The solution predicts shipment delivery times and surfaces insights on carrier p
 - **Single Source of Truth** - Use your existing Power BI semantic model; no data duplication needed
 - **Leverage Existing Work** - Reuse semantic models and relationships already created by your BI team
 - **Always Current** - Live data access means you're always working with the latest information
-- **Simplified Code** - Pre-joined tables and business logic reduce complexity
+- **Use DAX in Python** - Leverage Power BI relationships with RELATED() function
 - **Full Circle** - Train on BI data → Score predictions → Power BI reports (all in Fabric)
 
 ```python
 import sempy.fabric as fabric
 
-# Read tables directly from your Power BI semantic model
-shipments = fabric.read_table("delivery semantic model", "shipments")
-carriers = fabric.read_table("delivery semantic model", "carriers")
-warehouses = fabric.read_table("delivery semantic model", "warehouses")
+# Use DAX to query semantic model with relationships
+dax_query = """
+EVALUATE
+ADDCOLUMNS(
+    shipments,
+    "carrier_name", RELATED(carriers[carrier_name]),
+    "carrier_speed_factor", RELATED(carriers[speed_factor]),
+    "warehouse_name", RELATED(warehouses[warehouse_name])
+)
+"""
+
+df = fabric.evaluate_dax(dataset="delivery semantic model", dax_string=dax_query)
 ```
 
 ---
@@ -102,18 +110,23 @@ warehouses = fabric.read_table("delivery semantic model", "warehouses")
 ### How It Works
 
 **Step 1: Data Preparation**
-- Load shipments, carriers, and warehouses from your Power BI semantic model
-- Feature engineering automatically creates prediction variables
-- Data validation ensures quality
+- Connect to Power BI semantic model using Semantic Link
+- Use DAX queries with RELATED() to leverage existing relationships
+- Load shipments with related carrier and warehouse data
+- Explore data structure and relationships
 
 **Step 2: Model Training**
 - AutoML finds the best model (Random Forest, XGBoost, or Extra Trees)
+- Features: carrier_id, warehouse_id, regions, distance_band, service_level, timing
 - Model registered in MLflow for tracking and versioning
-- Training takes ~3 minutes
+- Training takes ~3 minutes with 180-second budget
 
 **Step 3: Generate Predictions**
-- Score all shipments with predicted delivery times
-- Write predictions back to Lakehouse
+- Load trained model from MLflow registry
+- Use same DAX query to get shipment data
+- Generate predictions for all shipments
+- Add metadata (prediction_date, model_version)
+- Write predictions to Lakehouse table with overwriteSchema option
 - Predictions appear automatically in Power BI
 
 **Step 4: Power BI Dashboards**
@@ -224,8 +237,25 @@ This checks for:
 Execute notebooks **in order**:
 
 1. **Data Preparation** - `01_semantic_link_data_preparation.ipynb`
+   - Install Semantic Link package
+   - Connect to semantic model
+   - Explore tables and relationships
+   - Visualize data structure
+
 2. **Model Training** - `02_autoML_training_pipeline.ipynb` (~3 minutes)
+   - Execute DAX query with RELATED()
+   - Prepare features and target
+   - Train AutoML model (180 sec budget)
+   - Evaluate performance (MAE, RMSE, R²)
+   - Register model in MLflow
+   - Generate visualizations
+
 3. **Batch Scoring** - `03_batch_scoring_pipeline.ipynb`
+   - Load model from MLflow
+   - Query shipment data with DAX
+   - Generate predictions
+   - Save to `shipment_predictions` table
+   - Visualize prediction distribution
 
 #### 5. **Connect Power BI Report**
 
@@ -272,26 +302,52 @@ To retrain with new data:
 
 ### Key DAX Measures
 
+The `powerbi/dax/` folder contains sample measures for your Power BI reports:
+
+**Basic Measures** (`measures_basic.dax`):
 ```dax
-AvgActualDeliveryDays = AVERAGE(shipments[delivery_days])
-AvgPredictedDeliveryDays = AVERAGE(shipment_predictions[predicted_delivery_days])
+Total Shipments = COUNTROWS(shipments)
+
+Avg Actual Delivery Days = AVERAGE(shipments[delivery_days_actual])
+
+Avg Predicted Delivery Days = AVERAGE(shipment_predictions[predicted_delivery_days])
+
+Avg Prediction Error = 
+AVERAGEX(
+    shipment_predictions,
+    VAR ShipmentID = shipment_predictions[shipment_id]
+    VAR Predicted = shipment_predictions[predicted_delivery_days]
+    VAR Actual = CALCULATE(
+        MAX(shipments[delivery_days_actual]),
+        shipments[shipment_id] = ShipmentID
+    )
+    RETURN IF(NOT(ISBLANK(Actual)), ABS(Predicted - Actual), BLANK())
+)
 ```
 
-See `powerbi/dax/` folder for complete measures.
+**Advanced Measures** (`measures_advanced.dax`):
+- RMSE, R-Squared, Median Absolute Error
+- Carrier performance comparison
+- Regional accuracy analysis
+- Trend analysis (7-day, 30-day MAE)
+
+See complete DAX code and documentation in the `powerbi/dax/` folder.
 
 ---
 
 ## 📚 What's Included
 
 ### Notebooks
-- **Data Preparation** - Load from semantic model, validate, engineer features
-- **Training Pipeline** - AutoML training with MLflow tracking
-- **Batch Scoring** - Generate predictions for all shipments
+- **01_semantic_link_data_preparation.ipynb** - Explore semantic model, visualize relationships, load tables
+- **02_autoML_training_pipeline.ipynb** - DAX queries, AutoML training, MLflow registration, visualizations
+- **03_batch_scoring_pipeline.ipynb** - Load model, generate predictions, save to Lakehouse, Power BI integration
 
 ### Utilities (`notebooks/utils/`)
 - **preprocessing.py** - Data validation and cleaning
 - **feature_engineering.py** - Feature creation functions
 - **model_utils.py** - Model evaluation and MLflow helpers
+
+**Note:** The notebooks use DAX queries with RELATED() instead of manual pandas joins, so utility functions are provided for reference but not required for the core workflow.
 
 ### Configuration (`config/`)
 - **automl_settings.json** - AutoML configuration (180 sec, MAE metric)
@@ -322,13 +378,25 @@ Expected performance:
 ## 🔍 Troubleshooting
 
 **Semantic Link connection fails**
-- Verify semantic model name and workspace permissions
+- Verify semantic model name: `"delivery semantic model"`
+- Check workspace permissions
+- Ensure you're running in a Fabric notebook
+
+**DAX query returns columns with table prefixes (e.g., `shipments[column_name]`)**
+- Use column name cleaning: `df.columns = [col.split('[')[-1].replace(']', '') for col in df.columns]`
 
 **MLflow model not found**
-- Check model registry name in MLflow experiments
+- Check model registry name: `POC-DeliveryTimeModel-AutoML-Safe`
+- Verify you've run the training notebook first
+- Check MLflow experiments in your Fabric workspace
 
 **Power BI shows no predictions**
 - Verify `shipment_predictions` table exists in Lakehouse
+- Check table was written with correct schema
+- Refresh Power BI semantic model
+
+**Spark write fails with schema mismatch**
+- Use `.option("overwriteSchema", "true")` when writing to Lakehouse
 
 ---
 
@@ -344,11 +412,26 @@ Expected performance:
 
 Ideas for extending this POC:
 
-- Add weather data or traffic patterns
-- Deploy as real-time API endpoint
-- Add SHAP values for prediction explanations
-- Schedule automated retraining
-- A/B test model versions
+- **Add more features** - Weather data, traffic patterns, holidays
+- **Real-time predictions** - Deploy as API endpoint for live scoring
+- **Model explanations** - Add SHAP values to understand predictions
+- **Automated retraining** - Schedule monthly or weekly model updates
+- **A/B testing** - Compare different model versions
+- **Business rules** - Combine ML predictions with business logic
+- **Alerting** - Flag shipments predicted to miss SLAs
+- **Custom visuals** - Build specialized Power BI visualizations
+
+---
+
+## 💡 Key Learnings
+
+This POC demonstrates:
+
+✅ **DAX + Python Integration** - Use DAX RELATED() in Python for relationship navigation  
+✅ **Semantic Link Value** - Leverage existing BI models for ML without data duplication  
+✅ **Fabric Ecosystem** - Seamless integration of notebooks, Lakehouse, MLflow, and Power BI  
+✅ **AutoML Efficiency** - Production-ready models in minutes, not hours  
+✅ **BI Developer Friendly** - Familiar DAX patterns make ML accessible to BI teams
 
 ---
 
